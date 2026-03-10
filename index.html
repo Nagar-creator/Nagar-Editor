@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>Nagar-Editor</title>
+
+    <!-- スマホの自動拡大を防止 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- ▼ PWA 用 manifest -->
+    <link rel="manifest" href="manifest.json">
+
+    <!-- ▼ Android のテーマカラー（上部バーの色） -->
+    <meta name="theme-color" content="#1e1e1e">
+
+    <style>
+        body {
+            padding: 10px;
+            font-family: sans-serif;
+            background: #ffffff;
+            color: #000000;
+        }
+
+        /* ▼ 自動ダークモード（UIは変えず色だけ変える） */
+        body.dark {
+            background: #1e1e1e;
+            color: #ddd;
+        }
+
+        body.dark #editorWrap {
+            border-color: #555;
+        }
+
+        body.dark #lineNumbers {
+            background: #2d2d2d;
+            color: #aaa;
+        }
+
+        body.dark #editor {
+            background: #252526;
+            color: #eee;
+        }
+
+        body.dark #buttonArea button,
+        body.dark #buttonArea input[type="file"] {
+            background: #3a3a3a;
+            color: #eee;
+        }
+
+        body.dark #FileName {
+            background: #2d2d2d;
+            color: #eee;
+        }
+
+        body.dark #charCount {
+            color: #bbb;
+        }
+
+        /* ボタン3つを横並びで同じ大きさにする */
+        #buttonArea {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        #buttonArea button,
+        #buttonArea input[type="file"] {
+            flex: 1;
+            padding: 10px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+
+        #FileName {
+            width: 100%;
+            padding: 8px;
+            font-size: 16px;
+            margin-bottom: 10px;
+            box-sizing: border-box;
+        }
+
+        /* エディタ＋行番号の横並び */
+        #editorWrap {
+            display: flex;
+            width: 100%;
+            height: 75vh;
+            box-sizing: border-box;
+            border: 1px solid #ccc;
+        }
+
+        /* 行番号 */
+        #lineNumbers {
+            width: 50px;
+            background: #f0f0f0;
+            padding: 10px 5px;
+            text-align: right;
+            font-family: "Consolas", "Courier New", monospace;
+            font-size: 16px;
+            line-height: 1.4;
+            overflow: hidden;
+            user-select: none;
+            white-space: pre;
+            box-sizing: border-box;
+        }
+
+        /* テキストエリア */
+        #editor {
+            flex: 1;
+            padding: 10px;
+            font-size: 16px;
+            font-family: "Consolas", "Courier New", monospace;
+            line-height: 1.4;
+            box-sizing: border-box;
+            resize: none;
+            white-space: pre;
+            overflow: auto;
+            overflow-wrap: normal;
+        }
+
+        /* 文字数カウンター */
+        #charCount {
+            text-align: right;
+            margin-top: 5px;
+            font-size: 14px;
+            color: #555;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="buttonArea">
+        <button id="saveButton">保存</button>
+        <input id="fileInput" type="file" accept=".txt">
+        <button id="newButton">新規</button>
+    </div>
+
+    <input id="FileName" type="text" placeholder="ファイル名（空白は memo.txt）">
+
+    <div id="editorWrap">
+        <div id="lineNumbers">1</div>
+        <textarea id="editor" wrap="off" placeholder="テキストを入力"></textarea>
+    </div>
+
+    <div id="charCount">0 文字</div>
+
+    <script>
+        const editor = document.getElementById("editor");
+        const lineNumbers = document.getElementById("lineNumbers");
+        const charCount = document.getElementById("charCount");
+        const fileNameInput = document.getElementById("FileName");
+
+        // 行番号更新
+        function updateLineNumbers() {
+            const lines = editor.value.split("\n").length;
+            let nums = "";
+            for (let i = 1; i <= lines; i++) nums += i + "\n";
+            lineNumbers.textContent = nums;
+        }
+
+        // 文字数更新
+        function updateCharCount() {
+            charCount.textContent = editor.value.length + " 文字";
+        }
+
+        // スクロール同期
+        editor.addEventListener("scroll", () => {
+            lineNumbers.scrollTop = editor.scrollTop;
+        });
+
+        // 本文の自動保存
+        editor.addEventListener("input", () => {
+            updateLineNumbers();
+            updateCharCount();
+            localStorage.setItem("autosave_text", editor.value);
+        });
+
+        // タイトルの自動保存
+        fileNameInput.addEventListener("input", () => {
+            localStorage.setItem("autosave_title", fileNameInput.value);
+        });
+
+        // ページ読み込み時に復元
+        window.addEventListener("load", () => {
+            const saved = localStorage.getItem("autosave_text");
+            if (saved !== null) editor.value = saved;
+
+            const savedTitle = localStorage.getItem("autosave_title");
+            if (savedTitle !== null) fileNameInput.value = savedTitle;
+
+            updateLineNumbers();
+            updateCharCount();
+
+            // 自動ダークモード
+            if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
+                document.body.classList.add("dark");
+            }
+        });
+
+        // 保存
+        document.getElementById("saveButton").addEventListener("click", () => {
+            let fullName = fileNameInput.value;
+            if (!fullName) fullName = "memo.txt";
+
+            const blob = new Blob([editor.value], { type: "text/plain" });
+            const url = URL.createObjectURL(blob);
+
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = fullName;
+            a.click();
+
+            URL.revokeObjectURL(url);
+        });
+
+        // 読み込み
+        document.getElementById("fileInput").addEventListener("change", (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = () => {
+                editor.value = reader.result;
+                fileNameInput.value = file.name;
+
+                updateLineNumbers();
+                updateCharCount();
+
+                localStorage.setItem("autosave_text", reader.result);
+                localStorage.setItem("autosave_title", file.name);
+            };
+            reader.readAsText(file);
+        });
+
+        // 新規
+        document.getElementById("newButton").addEventListener("click", () => {
+            if (confirm("現在の内容を消して新規メモを作成しますか？")) {
+                editor.value = "";
+                fileNameInput.value = "";
+
+                localStorage.removeItem("autosave_text");
+                localStorage.removeItem("autosave_title");
+
+                updateLineNumbers();
+                updateCharCount();
+            }
+        });
+
+        /* ▼ PWA: service-worker 登録 */
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('service-worker.js');
+        }
+    </script>
+
+</body>
+</html>
